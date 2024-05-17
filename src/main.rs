@@ -1,6 +1,9 @@
 use std::env::{self, Args};
 use std::fs;
-use std::io::{self, stdin, BufRead};
+use std::io::{self, BufRead};
+
+mod error;
+mod token;
 
 fn main() {
     get_args(env::args());
@@ -30,5 +33,17 @@ fn run_file(path: String) {
 }
 
 fn run_prompt() {
-    let mut input_line = String::new();
+    let mut buffer = String::new();
+    let stdin = io::stdin();
+
+    loop {
+        println!("> ");
+        let mut line = stdin.lock().read_line(&mut buffer).unwrap();
+        run(line);
+    }
+}
+
+fn run(source: String) {
+    let mut scanner = Scanner::new(source);
+    let tokens: Vec<Tokens> = scanner.scan_tokens();
 }
