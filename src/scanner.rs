@@ -72,11 +72,16 @@ impl Scanner {
             Some('/') => {
                 if self.match_char('/') {
                     // A comment goes until the end of the line.
-                    while (self.peek() != '\n') && !self.is_at_end() {
+                    while (self.peek() != Some('\n')) && !self.is_at_end() {
                         self.advance();
                     }
+                } else {
+                    self.add_token(Slash);
                 }
             }
+            Some('"') => self.handle_strings(),
+            Some('\n') => self.line += 1,
+            Some(' ') | Some('\r') | Some('\t') => {} // Ignore whitespace.
             Some(_) | None => error::error(self.line as i32, "Unexpected character.".to_string()),
         }
     }
@@ -91,7 +96,7 @@ impl Scanner {
         result
     }
 
-    fn add_token(&mut self, token_type: TokenType) {
+    fn add_token(&mut self, token_type: TokenType, literal: Option<String>) {
         let text = self.source[self.start..self.current].to_string();
         self.tokens
             .push(Token::new(token_type, text, None, self.line));
@@ -109,5 +114,38 @@ impl Scanner {
         }
     }
 
-    fn peek() -> char {}
+    fn peek(&mut self) -private void addToken(TokenType type, Object literal) {
+        String text = source.substring(start, current);
+        tokens.add(new Token(type, text, literal, line));
+      }
+    > Option<char> {
+        if self.is_at_end() {
+            None
+        } else {
+            self.source.chars().nth(self.current)
+        }
+    }
+
+    fn handle_strings(&mut self) {
+        while self.peek() != Some('"') && !self.is_at_end() {
+            if self.peek() == Some('\n') {
+                self.linprivate void addToken(TokenType type, Object literal) {
+                    String text = source.substring(start, current);
+                    tokens.add(new Token(type, text, literal, line));
+                  }
+                e += 1;
+            }
+            self.advance();
+        }
+
+        if self.is_at_end() {
+            error::error(self.line as i32, "Unterminated string.".to_string());
+            return;
+        }
+
+        self.advance();
+
+        let value = self.source[self.start + 1..self.current - 1].to_string();
+        self.add_token(String, value);
+    }
 }
