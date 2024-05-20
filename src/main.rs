@@ -3,6 +3,7 @@ use std::fs;
 use std::io::{self, BufRead};
 
 mod error;
+mod scanner;
 mod token;
 
 fn main() {
