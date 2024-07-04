@@ -1,25 +1,21 @@
-use std::intrinsics::rustc_peek;
+use crate::lox_error;
+use crate::token::{Token, TokenType};
 
-use crate::token::{
-    Token,
-    TokenType::{self, *},
-};
-
-use crate::error;
-
+/// Takes raw source code as a series of characters and groups it into tokens.
 pub struct Scanner {
-    source: String,
-    tokens: Vec<Token>,
+    /// The raw source code.
+    pub source: String,
+    pub tokens: Vec<Token>,
     start: usize,
     current: usize,
-    line: usize,
+    line: i32,
 }
 
 impl Scanner {
-    /// Creates new Scanner instance
-    pub fn new(src: String) -> Self {
+    #[must_use]
+    pub fn new(source: String) -> Self {
         Scanner {
-            source: src,
+            source,
             tokens: Vec::new(),
             start: 0,
             current: 0,
@@ -27,125 +23,96 @@ impl Scanner {
         }
     }
 
-    pub fn scan_tokens(&mut self) -> Vec<Token> {
+    /// Loops over the source code adding tokens.
+    pub fn scan_tokens(&mut self) -> eyre::Result<()> {
         while !self.is_at_end() {
-            // We are at the beginning of the next lexeme.
             self.start = self.current;
             self.scan_token();
         }
+        self.tokens.push(Token::new(
+            crate::token::TokenType::Eof,
+            "".to_string(),
+            None,
+            self.line,
+        ));
+
+        Ok(())
     }
 
+    /// Consumes a single character and analyzes it's `TokenType`
     fn scan_token(&mut self) {
-        let mut c = self.advance();
-
+        let c = self.advance();
         match c {
-            Some('(') => self.add_token(LeftParen),
-            Some(')') => self.add_token(RightParen),
-            Some('{') => self.add_token(LeftBrace),
-            Some('}') => self.add_token(RightBrace),
-            Some(',') => self.add_token(Comma),
-            Some('.') => self.add_token(Dot),
-            Some('-') => self.add_token(Minus),
-            Some('+') => self.add_token(Plus),
-            Some(';') => self.add_token(Semicolon),
-            Some('*') => self.add_token(Star),
-            Some('!') => self.add_token(if self.match_char('=') {
-                BangEqual
-            } else {
-                Bang
-            }),
-            Some('=') => self.add_token(if self.match_char('=') {
-                EqualEqual
-            } else {
-                Equal
-            }),
-            Some('<') => self.add_token(if self.match_char('=') {
-                LessEqual
-            } else {
-                Less
-            }),
-            Some('>') => self.add_token(if self.match_char('=') {
-                GreaterEqual
-            } else {
-                Greater
-            }),
-            Some('/') => {
-                if self.match_char('/') {
-                    // A comment goes until the end of the line.
-                    while (self.peek() != Some('\n')) && !self.is_at_end() {
-                        self.advance();
-                    }
-                } else {
-                    self.add_token(Slash);
-                }
-            }
-            Some('"') => self.handle_strings(),
-            Some('\n') => self.line += 1,
-            Some(' ') | Some('\r') | Some('\t') => {} // Ignore whitespace.
-            Some(_) | None => error::error(self.line as i32, "Unexpected character.".to_string()),
+            '(' => self.add_token(TokenType::LeftParen),
+            ')' => self.add_token(TokenType::RightParen),
+            '{' => self.add_token(TokenType::LeftBrace),
+            '}' => self.add_token(TokenType::RightBrace),
+            ',' => self.add_token(TokenType::Comma),
+            '.' => self.add_token(TokenType::Dot),
+            '-' => self.add_token(TokenType::Minus),
+            '+' => self.add_token(TokenType::Plus),
+            ';' => self.add_token(TokenType::Semicolon),
+            '*' => self.add_token(TokenType::Star),
+            // Comparison for two-sized lexemes
+            '!' => self.check_second_char('=', TokenType::BangEqual, TokenType::Bang),
+            '=' => self.check_second_char('=', TokenType::EqualEqual, TokenType::Equal),
+            '<' => self.check_second_char('=', TokenType::LessEqual, TokenType::Less),
+            '>' => self.check_second_char('=', TokenType::GreaterEqual, TokenType::Greater),
+            '/' => self.handle_slash(),
+            _ => lox_error::error(self.line, "Unexpected character"),
         }
     }
 
-    fn is_at_end(&self) -> bool {
-        self.current >= self.source.len()
+    fn add_token(&mut self, token: TokenType) -> () {
+        self.push_token(token, None)
     }
 
-    fn advance(&mut self) -> Option<char> {
-        let result = self.source.chars().nth(self.current);
-        self.current += 1;
-        result
-    }
-
-    fn add_token(&mut self, token_type: TokenType, literal: Option<String>) {
-        let text = self.source[self.start..self.current].to_string();
+    fn push_token(&mut self, token: TokenType, literal: Option<String>) -> () {
+        let lexeme = String::from(&self.source[self.start..self.current]);
         self.tokens
-            .push(Token::new(token_type, text, None, self.line));
+            .push(Token::new(token, lexeme, literal, self.line))
     }
 
+    /// Consumes the next character in the source file.
+    fn advance(&mut self) -> char {
+        let c = self.source.chars().nth(self.current).unwrap();
+        self.current += 1;
+        c
+    }
+
+    /// Checks for lexemes containing more than one character.
+    fn check_second_char(&mut self, expected: char, t1: TokenType, t2: TokenType) {
+        if self.match_char(expected) {
+            self.add_token(t1);
+        } else {
+            self.add_token(t2);
+        }
+    }
+
+    /// Returns true if the next character corresponds to the @param:expected.
     fn match_char(&mut self, expected: char) -> bool {
         if self.is_at_end() {
             return false;
         }
-        if self.source.chars().nth(self.current) == Some(expected) {
-            self.current += 1;
-            true
-        } else {
-            false
+        let curr = self.source.chars().nth(self.current).unwrap();
+        if curr != expected {
+            return false;
+        }
+        self.current += 1;
+        true
+    }
+
+    /// Specifically for cases containing '/' character.
+    fn handle_slash(&mut self) {
+        if self.match_char('/') {
+            while self.peek {}
         }
     }
 
-    fn peek(&mut self) -private void addToken(TokenType type, Object literal) {
-        String text = source.substring(start, current);
-        tokens.add(new Token(type, text, literal, line));
-      }
-    > Option<char> {
-        if self.is_at_end() {
-            None
-        } else {
-            self.source.chars().nth(self.current)
-        }
-    }
+    /// Returns the current character without consuming it.
+    fn peek(&self) {}
 
-    fn handle_strings(&mut self) {
-        while self.peek() != Some('"') && !self.is_at_end() {
-            if self.peek() == Some('\n') {
-                self.linprivate void addToken(TokenType type, Object literal) {
-                    String text = source.substring(start, current);
-                    tokens.add(new Token(type, text, literal, line));
-                  }
-                e += 1;
-            }
-            self.advance();
-        }
-
-        if self.is_at_end() {
-            error::error(self.line as i32, "Unterminated string.".to_string());
-            return;
-        }
-
-        self.advance();
-
-        let value = self.source[self.start + 1..self.current - 1].to_string();
-        self.add_token(String, value);
+    fn is_at_end(&self) -> bool {
+        self.current >= self.source.len()
     }
 }

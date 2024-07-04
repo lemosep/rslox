@@ -1,50 +1,52 @@
 use std::env::{self, Args};
 use std::fs;
-use std::io::{self, BufRead};
+use std::io::{self, Write};
+use std::process;
 
-mod error;
+mod lox_error;
 mod scanner;
 mod token;
 
-fn main() {
-    get_args(env::args());
+fn main() -> eyre::Result<()> {
+    let args = env::args();
+    parse_args(args)?;
+    Ok(())
 }
 
-fn get_args(args: Args) {
-    let args: Vec<String> = args.collect();
-
-    if args.len() > 1 {
-        println!("Usage: rslox [script]");
-        std::process::exit(64);
-    } else if args.len() == 1 {
-        run_file(args[0]);
-    } else {
-        run_prompt();
+fn parse_args(args: Args) -> eyre::Result<()> {
+    let iter_args: Vec<String> = args.collect();
+    match iter_args.len() {
+        1 => run_prompt(),
+        2 => run_file(&iter_args[1]),
+        _ => {
+            println!("Usage: rslox [script]");
+            process::exit(64);
+        }
     }
 }
 
-fn run_file(path: String) {
-    let lines: Vec<String> = fs::read_to_string(path)
-        .unwrap()
+fn run_prompt() -> eyre::Result<()> {
+    let mut input = String::new();
+    loop {
+        println!(">");
+        io::stdout().flush().unwrap();
+        io::stdin().read_line(&mut input)?;
+        if input.trim().len() < 1 {
+            break;
+        }
+        run(&input);
+        input.clear();
+    }
+    Ok(())
+}
+
+fn run_file(path: &str) -> eyre::Result<()> {
+    let lines = fs::read_to_string(path)?
         .lines()
         .map(String::from)
         .collect();
-
-    run(lines);
+    run(&lines);
+    Ok(())
 }
 
-fn run_prompt() {
-    let mut buffer = String::new();
-    let stdin = io::stdin();
-
-    loop {
-        println!("> ");
-        let mut line = stdin.lock().read_line(&mut buffer).unwrap();
-        run(line);
-    }
-}
-
-fn run(source: String) {
-    let mut scanner = Scanner::new(source);
-    let tokens: Vec<Tokens> = scanner.scan_tokens();
-}
+fn run(source: &String) {}
