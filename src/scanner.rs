@@ -1,5 +1,6 @@
-use crate::lox_error;
+use crate::{lox_error, literal};
 use crate::token::{Token, TokenType};
+use crate::literal::Value;
 
 /// Takes raw source code as a series of characters and groups it into tokens.
 pub struct Scanner {
@@ -7,6 +8,7 @@ pub struct Scanner {
     pub source: String,
     pub tokens: Vec<Token>,
     start: usize,
+    /// Current token being iterated
     current: usize,
     line: i32,
 }
@@ -59,6 +61,11 @@ impl Scanner {
             '<' => self.check_second_char('=', TokenType::LessEqual, TokenType::Less),
             '>' => self.check_second_char('=', TokenType::GreaterEqual, TokenType::Greater),
             '/' => self.handle_slash(),
+            // Also lexemes, but they do not produce any value
+            ' ' | '\r' | '\t' => (),
+            '\n' => self.line += 1,
+            //string literals
+            '"' => self.string(),
             _ => lox_error::error(self.line, "Unexpected character"),
         }
     }
@@ -67,7 +74,12 @@ impl Scanner {
         self.push_token(token, None)
     }
 
-    fn push_token(&mut self, token: TokenType, literal: Option<String>) -> () {
+    // Is this even performance-prone?
+    fn add_string_lexeme(&mut self, token: TokenType, literal: literal::Value) -> () {
+     
+    }
+
+    fn push_token(&mut self, token: TokenType, literal: Option<literal::Value>) -> () {
         let lexeme = String::from(&self.source[self.start..self.current]);
         self.tokens
             .push(Token::new(token, lexeme, literal, self.line))
@@ -104,14 +116,51 @@ impl Scanner {
 
     /// Specifically for cases containing '/' character.
     fn handle_slash(&mut self) {
-        if self.match_char('/') {
-            while self.peek {}
+        match self.match_char('/') {
+            true => {
+                while (self.peek() != '\n') && !self.is_at_end() {
+                    self.advance();
+                }
+            },
+            false => self.add_token(TokenType::Slash),
         }
     }
 
     /// Returns the current character without consuming it.
-    fn peek(&self) {}
+    fn peek(&self) -> char {
+        match self.is_at_end() {
+            true => '\0',
+            false => self.source.chars().nth(self.current).unwrap().clone(),
+        }
+    }
 
+    /// Treats string literals
+    fn string(&mut self) {
+        while (self.peek() != '\n') && !self.is_at_end() {
+            if self.peek() == '\n' {
+                self.line += 1;
+            }
+            self.advance();
+        }
+
+        if self.is_at_end() {
+            lox_error::error(self.line, "Unterminated string.");
+            return;
+        }   
+
+        // Closing ".
+        self.advance();
+
+        // Trimming surrounding quotes.
+        let val = self.source.get(self.start..(self.current - 1)).unwrap();
+        
+        self.add_string_lexeme(
+            TokenType::String,
+            literal::Value::Str { v: val.to_string() }
+        );
+    }  
+
+    /// Verify if source has reached EOF.
     fn is_at_end(&self) -> bool {
         self.current >= self.source.len()
     }

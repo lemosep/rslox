@@ -6,6 +6,7 @@ use std::process;
 mod lox_error;
 mod scanner;
 mod token;
+mod literal;
 
 fn main() -> eyre::Result<()> {
     let args = env::args();

@@ -1,3 +1,5 @@
+use crate::literal::{self, Value};
+
 #[derive(Debug)]
 pub enum TokenType {
     /// Single-character tokens.
@@ -53,12 +55,12 @@ pub enum TokenType {
 pub struct Token {
     token_type: TokenType,
     lexeme: String,
-    literal: Option<String>,
+    literal: Option<Value>,
     line: i32,
 }
 
 impl Token {
-    pub fn new(token_type: TokenType, lexeme: String, literal: Option<String>, line: i32) -> Self {
+    pub fn new(token_type: TokenType, lexeme: String, literal: Option<Value>, line: i32) -> Self {
         Token {
             token_type,
             lexeme,
@@ -70,8 +72,8 @@ impl Token {
     fn to_string(&self) -> String {
         let literal_str = match &self.literal {
             Some(literal) => literal.clone(),
-            None => "null".to_string(),
+            None => literal::Value::Str { v: "null".to_string() },
         };
-        format!("{:?} {} {}", self.token_type, self.lexeme, literal_str)
+        format!("{:?} {} {:?}", self.token_type, self.lexeme, literal_str)
     }
 }
